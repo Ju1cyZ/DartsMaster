@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>🎯 DartsMaster</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-theme="dark">
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: HOME
+  ═══════════════════════════════════════════ -->
+  <div id="screen-home" class="screen active">
+    <div class="home-bg"></div>
+    <header class="home-header">
+      <div class="logo">
+        <span class="logo-icon">🎯</span>
+        <span class="logo-text">DARTS<strong>MASTER</strong></span>
+      </div>
+      <button class="theme-toggle" id="themeToggle" title="Changer le thème">☀</button>
+    </header>
+
+    <main class="home-main">
+      <div class="home-actions">
+        <button class="btn-primary btn-xl" id="btnNewGame">
+          <span class="btn-icon">▶</span>
+          Nouvelle Partie
+        </button>
+        <button class="btn-secondary btn-xl" id="btnContinue" disabled>
+          <span class="btn-icon">↩</span>
+          Continuer
+        </button>
+        <button class="btn-ghost btn-xl" id="btnHistory">
+          <span class="btn-icon">📋</span>
+          Historique
+        </button>
+      </div>
+    </main>
+
+    <footer class="home-footer">
+      <span>DartsMaster v1.0 — 100% local</span>
+    </footer>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: SETUP
+  ═══════════════════════════════════════════ -->
+  <div id="screen-setup" class="screen">
+    <header class="screen-header">
+      <button class="btn-back" id="setupBack">← Retour</button>
+      <h1>Nouvelle Partie</h1>
+    </header>
+
+    <main class="setup-main">
+      <!-- Game mode selection -->
+      <section class="setup-section">
+        <h2 class="setup-label">Mode de jeu</h2>
+        <div class="game-mode-grid" id="gameModeGrid">
+          <button class="mode-card active" data-mode="501">
+            <span class="mode-name">501</span>
+            <span class="mode-desc">Standard</span>
+          </button>
+          <button class="mode-card" data-mode="301">
+            <span class="mode-name">301</span>
+            <span class="mode-desc">Court</span>
+          </button>
+          <button class="mode-card" data-mode="cricket">
+            <span class="mode-name">Cricket</span>
+            <span class="mode-desc">Stratégique</span>
+          </button>
+          <button class="mode-card" data-mode="around">
+            <span class="mode-name">Around</span>
+            <span class="mode-desc">the World</span>
+          </button>
+          <button class="mode-card" data-mode="custom">
+            <span class="mode-name">Custom</span>
+            <span class="mode-desc">Personnalisé</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Options -->
+      <section class="setup-section" id="setupOptions">
+        <div class="option-row" id="optionDoubleOut">
+          <label class="option-label">Double Out</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="doubleOutToggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="option-row" id="optionCustomScore" style="display:none">
+          <label class="option-label">Score de départ</label>
+          <input type="number" id="customScore" class="score-input" value="500" min="101" max="1001" step="100" />
+        </div>
+      </section>
+
+      <!-- Players -->
+      <section class="setup-section">
+        <div class="players-header">
+          <h2 class="setup-label">Joueurs <span id="playerCount">(1)</span></h2>
+          <button class="btn-add" id="btnAddPlayer">+ Ajouter</button>
+        </div>
+        <div class="players-list" id="playersList">
+          <!-- Players added dynamically -->
+        </div>
+      </section>
+    </main>
+
+    <footer class="setup-footer">
+      <button class="btn-primary btn-xl" id="btnStartGame">Lancer la Partie 🎯</button>
+    </footer>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: GAME
+  ═══════════════════════════════════════════ -->
+  <div id="screen-game" class="screen">
+    <header class="game-header">
+      <button class="btn-back" id="gameBack">← Menu</button>
+      <div class="game-mode-badge" id="gameModeBadge">501</div>
+      <button class="btn-undo" id="btnUndo" title="Annuler">↩</button>
+    </header>
+
+    <!-- Players scoreboard (501/301/custom) -->
+    <div id="view-scoreboard" class="game-view">
+      <div class="scoreboard" id="scoreboard"></div>
+    </div>
+
+    <!-- Cricket view -->
+    <div id="view-cricket" class="game-view" style="display:none">
+      <div class="cricket-board" id="cricketBoard"></div>
+    </div>
+
+    <!-- Around the World view -->
+    <div id="view-around" class="game-view" style="display:none">
+      <div class="around-board" id="aroundBoard"></div>
+    </div>
+
+    <!-- Input area -->
+    <div class="game-input-area" id="gameInputArea">
+      <div class="current-turn-info">
+        <span class="turn-player" id="turnPlayerName">Joueur 1</span>
+        <div class="turn-darts" id="turnDarts">
+          <span class="dart-slot" data-dart="0">—</span>
+          <span class="dart-slot" data-dart="1">—</span>
+          <span class="dart-slot" data-dart="2">—</span>
+        </div>
+        <span class="turn-total" id="turnTotal">0</span>
+      </div>
+
+      <!-- Standard score input (501/301/custom) -->
+      <div id="inputStandard" class="input-panel">
+        <div class="score-buttons" id="scoreButtons">
+          <!-- Generated by JS -->
+        </div>
+        <div class="input-row">
+          <input type="number" id="manualInput" class="manual-input" placeholder="Score manuel" min="0" max="180" />
+          <button class="btn-confirm" id="btnConfirmScore">✓</button>
+        </div>
+        <div class="checkout-hint" id="checkoutHint"></div>
+      </div>
+
+      <!-- Cricket input -->
+      <div id="inputCricket" class="input-panel" style="display:none">
+        <div class="cricket-input-grid" id="cricketInputGrid">
+          <!-- Generated by JS -->
+        </div>
+      </div>
+
+      <!-- Around the World input -->
+      <div id="inputAround" class="input-panel" style="display:none">
+        <div class="around-controls">
+          <button class="btn-around btn-hit" id="btnAroundHit">✓ Touché</button>
+          <button class="btn-around btn-miss" id="btnAroundMiss">✗ Raté</button>
+        </div>
+        <div class="around-current" id="aroundCurrentTarget">
+          Cible : <strong>1</strong>
+        </div>
+      </div>
+
+      <button class="btn-next-turn" id="btnNextTurn" style="display:none">Tour Suivant →</button>
+    </div>
+
+    <!-- Winner overlay -->
+    <div class="winner-overlay" id="winnerOverlay" style="display:none">
+      <div class="winner-card">
+        <div class="winner-trophy">🏆</div>
+        <div class="winner-name" id="winnerName">Joueur 1</div>
+        <div class="winner-sub">GAGNANT !</div>
+        <div class="winner-stats" id="winnerStats"></div>
+        <div class="winner-actions">
+          <button class="btn-primary" id="btnPlayAgain">Rejouer</button>
+          <button class="btn-ghost" id="btnGoHome">Accueil</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: HISTORY
+  ═══════════════════════════════════════════ -->
+  <div id="screen-history" class="screen">
+    <header class="screen-header">
+      <button class="btn-back" id="historyBack">← Retour</button>
+      <h1>Historique</h1>
+      <button class="btn-danger-small" id="btnClearHistory">Tout effacer</button>
+    </header>
+    <main class="history-main">
+      <div class="history-list" id="historyList">
+        <p class="empty-state">Aucune partie enregistrée.</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
