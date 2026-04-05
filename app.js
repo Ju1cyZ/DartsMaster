@@ -552,6 +552,7 @@ const UI = {
     });
 
     document.getElementById('btnUndo').addEventListener('click', () => this._undoLastThrow());
+    document.getElementById('btnUndo').title = 'Annuler le dernier lancer (ou tout le tour précédent)';
 
     document.getElementById('btnConfirmScore').addEventListener('click', () => {
       const val = parseInt(document.getElementById('manualInput').value);
@@ -643,38 +644,53 @@ const UI = {
     const container = document.getElementById('cricketInputGrid');
     container.innerHTML = '';
 
+    // Header row
+    const header = document.createElement('div');
+    header.className = 'cricket-input-header';
+    header.innerHTML = `
+      <span class="cricket-col-label">CIBLE</span>
+      <span class="cricket-col-label single-lbl">S<small> ×1</small></span>
+      <span class="cricket-col-label double-lbl">D<small> ×2</small></span>
+      <span class="cricket-col-label triple-lbl">T<small> ×3</small></span>
+    `;
+    container.appendChild(header);
+
+    // One row per cricket target
     [...CRICKET_TARGETS].forEach(target => {
       const label = target === 25 ? 'BULL' : String(target);
-      const btn = document.createElement('button');
-      btn.className = 'cricket-btn';
-      btn.dataset.target = target;
-      btn.innerHTML = `${label}<small>×1</small>`;
+      const row = document.createElement('div');
+      row.className = 'cricket-input-row';
+      row.dataset.target = target;
 
-      // Cycle through ×1, ×2, ×3 on tap
-      btn.addEventListener('click', () => this._applyCricketThrow(target, 1));
+      // Target label cell
+      const labelCell = document.createElement('span');
+      labelCell.className = 'cricket-target-label';
+      labelCell.textContent = label;
+      row.appendChild(labelCell);
 
-      // Long-press for double
-      let pressTimer;
-      btn.addEventListener('mousedown', () => {
-        pressTimer = setTimeout(() => this._applyCricketThrow(target, 2), 400);
+      // S (×1) / D (×2) / T (×3) buttons
+      [1, 2, 3].forEach(mult => {
+        const btn = document.createElement('button');
+        btn.className = `cricket-mult-btn mult-${mult}`;
+        btn.dataset.target = target;
+        btn.dataset.mult = mult;
+        btn.textContent = ['', 'S', 'D', 'T'][mult];
+        btn.addEventListener('click', () => this._applyCricketThrow(target, mult));
+        row.appendChild(btn);
       });
-      btn.addEventListener('mouseup', () => clearTimeout(pressTimer));
-      btn.addEventListener('touchstart', e => {
-        e.preventDefault();
-        pressTimer = setTimeout(() => this._applyCricketThrow(target, 2), 400);
-      }, { passive: false });
-      btn.addEventListener('touchend', () => clearTimeout(pressTimer));
 
-      container.appendChild(btn);
+      container.appendChild(row);
     });
 
-    // Miss button
+    // MISS / pass button at the bottom
+    const missRow = document.createElement('div');
+    missRow.className = 'cricket-input-miss-row';
     const missBtn = document.createElement('button');
-    missBtn.className = 'cricket-btn';
-    missBtn.innerHTML = `MISS<small>raté</small>`;
-    missBtn.style.color = 'var(--red)';
+    missBtn.className = 'cricket-miss-btn';
+    missBtn.innerHTML = `✗ RATÉ — passer la fléchette`;
     missBtn.addEventListener('click', () => this._advanceCricketDart());
-    container.appendChild(missBtn);
+    missRow.appendChild(missBtn);
+    container.appendChild(missRow);
   },
 
   /* ── Countdown Game Logic (501/301/custom) ── */
@@ -792,7 +808,8 @@ const UI = {
       game.cricketPoints[player.id] += result.pointsGained;
     }
 
-    game.currentTurnScores.push({ target, multiplier });
+    // Store full throw data including points gained (needed for undo)
+    game.currentTurnScores.push({ target, multiplier, pointsGained: result.pointsGained });
     game.currentDart++;
 
     this._renderCricketBoard();
@@ -873,22 +890,84 @@ const UI = {
 
   _undoLastThrow() {
     const game = this.game;
-    if (game.currentTurnScores.length === 0) return;
 
-    const last = game.currentTurnScores.pop();
-    game.currentDart = Math.max(0, game.currentDart - 1);
+    // Case 1: There are throws in the current turn → undo the last one
+    if (game.currentTurnScores.length > 0) {
+      const last = game.currentTurnScores.pop();
+      game.currentDart = Math.max(0, game.currentDart - 1);
 
-    if (['501', '301', 'custom'].includes(game.mode)) {
-      game.scores[game.currentPlayer.id] += last.score;
-    } else if (game.mode === 'cricket' && last.target !== null) {
-      const state = game.cricketState[game.currentPlayer.id];
-      state[last.target] = Math.max(0, (state[last.target] || 0) - last.multiplier);
-      // Undo points (simplified: just subtract)
-    } else if (game.mode === 'around' && last.hit) {
-      game.aroundTargets[game.currentPlayer.id] = Math.max(0, game.aroundTargets[game.currentPlayer.id] - 1);
+      if (['501', '301', 'custom'].includes(game.mode)) {
+        // Restore score (only if not a bust entry, those don't reduce score)
+        if (!last.bust) {
+          game.scores[game.currentPlayer.id] += last.score;
+        }
+      } else if (game.mode === 'cricket') {
+        if (last.target !== null) {
+          const pid = game.currentPlayer.id;
+          const prevMarks = game.cricketState[pid][last.target] || 0;
+          const newMarks = Math.max(0, prevMarks - last.multiplier);
+          game.cricketState[pid][last.target] = newMarks;
+
+          // Restore points: if the throw awarded points, remove them
+          if (last.pointsGained && last.pointsGained > 0) {
+            game.cricketPoints[pid] = Math.max(0, (game.cricketPoints[pid] || 0) - last.pointsGained);
+          }
+        }
+      } else if (game.mode === 'around') {
+        if (last.hit) {
+          game.aroundTargets[game.currentPlayer.id] = Math.max(0, game.aroundTargets[game.currentPlayer.id] - 1);
+        }
+      }
+
+      document.getElementById('btnNextTurn').style.display = 'none';
+      this._renderGame();
+      Storage.saveCurrentGame(game);
+      return;
     }
 
+    // Case 2: No throws in current turn → undo the last completed turn
+    if (game.turnHistory.length === 0) return;
+
+    const lastTurn = game.turnHistory.pop();
+
+    // Go back to the previous player
+    game.currentPlayerIndex = (game.currentPlayerIndex - 1 + game.players.length) % game.players.length;
+    const prevPlayer = game.currentPlayer;
+
+    if (['501', '301', 'custom'].includes(game.mode)) {
+      if (!lastTurn.bust) {
+        // Re-add all scores of that turn
+        const total = lastTurn.scores.reduce((s, d) => s + (d.bust ? 0 : d.score), 0);
+        game.scores[prevPlayer.id] += total;
+      } else {
+        // Turn was a bust: score was already restored at end of turn, nothing to undo on the score
+        // But re-apply the deductions that happened before the bust
+        // Actually on bust the score is recalculated — so we need to recalculate again:
+        this._recalculateScoreForPlayer(prevPlayer.id);
+        // But the turn was popped, so now we need to add back the valid throws
+        const validTotal = lastTurn.scores.filter(d => !d.bust).reduce((s, d) => s + d.score, 0);
+        game.scores[prevPlayer.id] += validTotal;
+      }
+    } else if (game.mode === 'cricket') {
+      // Undo each throw of that turn in reverse
+      [...lastTurn.scores].reverse().forEach(throwData => {
+        if (throwData.target === null) return; // miss, nothing to undo
+        const state = game.cricketState[prevPlayer.id];
+        state[throwData.target] = Math.max(0, (state[throwData.target] || 0) - throwData.multiplier);
+        if (throwData.pointsGained > 0) {
+          game.cricketPoints[prevPlayer.id] = Math.max(0, (game.cricketPoints[prevPlayer.id] || 0) - throwData.pointsGained);
+        }
+      });
+    } else if (game.mode === 'around') {
+      const hitsInTurn = lastTurn.scores.filter(d => d.hit).length;
+      game.aroundTargets[prevPlayer.id] = Math.max(0, game.aroundTargets[prevPlayer.id] - hitsInTurn);
+    }
+
+    // Restore the turn as "in progress" so the player can re-enter their throws
+    game.currentTurnScores = [];
+    game.currentDart = 0;
     document.getElementById('btnNextTurn').style.display = 'none';
+
     this._renderGame();
     Storage.saveCurrentGame(game);
   },
@@ -935,7 +1014,8 @@ const UI = {
     document.getElementById('turnPlayerName').textContent = this.game.currentPlayer.name;
     this._updateDartDisplay();
     this._updateCheckoutHint(this.game.scores[this.game.currentPlayer.id]);
-    document.getElementById('btnUndo').disabled = this.game.currentTurnScores.length === 0;
+    document.getElementById('btnUndo').disabled =
+      game.currentTurnScores.length === 0 && game.turnHistory.length === 0;
 
     if (['501', '301', 'custom'].includes(mode)) {
       this._renderScoreboard();
@@ -1083,15 +1163,36 @@ const UI = {
   _updateCricketInputButtons() {
     const game = this.game;
     const player = game.currentPlayer;
-    document.querySelectorAll('.cricket-btn[data-target]').forEach(btn => {
-      const target = parseInt(btn.dataset.target);
+
+    CRICKET_TARGETS.forEach(target => {
       const marks = game.cricketState[player.id][target] || 0;
       const isClosed = marks >= 3;
-      btn.classList.toggle('closed-btn', isClosed);
+      const row = document.querySelector(`.cricket-input-row[data-target="${target}"]`);
+      if (!row) return;
 
-      const label = target === 25 ? 'BULL' : String(target);
-      const markLabel = isClosed ? '✓' : '';
-      btn.innerHTML = `${label}<small>${markLabel || '×1'}</small>`;
+      // Dim the row if this player has already closed the target
+      row.classList.toggle('cricket-row-closed', isClosed);
+
+      // Update each multiplier button: show which are still useful
+      row.querySelectorAll('.cricket-mult-btn').forEach(btn => {
+        const mult = parseInt(btn.dataset.mult);
+        // How many more marks can this player score on this target?
+        const marksNeeded = 3 - marks;
+        btn.disabled = isClosed;
+        btn.classList.toggle('mult-useful', !isClosed && mult <= marksNeeded);
+      });
+
+      // Update the target label to show current mark state
+      const labelEl = row.querySelector('.cricket-target-label');
+      if (labelEl) {
+        const markIcons = ['', '╱', '✕', '●'];
+        labelEl.textContent = (target === 25 ? 'BULL' : String(target));
+        if (marks > 0) {
+          labelEl.setAttribute('data-marks', marks);
+        } else {
+          labelEl.removeAttribute('data-marks');
+        }
+      }
     });
   },
 
